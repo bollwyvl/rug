@@ -426,7 +426,10 @@ Loads all repos by default, or those repos specified in the repos argument, whic
 		#self.read_manifest()
 
 		(remotes, repos, default) = manifest.read(self.manifest_filename, apply_default=False)
-
+		#TODO: we don't know if the remote even exists yet, so can't set up all branches
+		#logic elsewhere should be able to handle this possibility (remote & bookmark branches don't exist)
+		update_rug_branch = not self.bare
+		
 		r = self.repos.get(path, None)
 		if r is None:
 			if name is None:
@@ -468,10 +471,6 @@ Loads all repos by default, or those repos specified in the repos argument, whic
 
 			repos[path]['unpublished'] = 'true'
 
-			#TODO: we don't know if the remote even exists yet, so can't set up all branches
-			#logic elsewhere should be able to handle this possibility (remote & bookmark branches don't exist)
-			if not self.bare:
-				update_rug_branch = True
 		else:
 			self.load_repos([path])
 			#TODO: check for errors in load_repos

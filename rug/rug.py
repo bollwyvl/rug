@@ -2,76 +2,84 @@ import sys
 import getopt
 import os.path
 from project import Project, RugError
+import output
 
-def init(optdict={}, dir=None):
-	return Project.init(dir, optdict.has_key('-b'))
+def init(output_buffer, optdict, project_dir=None):
+	Project.init(project_dir, optdict.has_key('--bare'), output_buffer=output_buffer)
 
-def clone(optdict={}, url=None, dir=None, revset=None):
+def clone(output_buffer, optdict, url=None, project_dir=None):
 	if not url:
 		raise RugError('url must be specified')
 
-	return Project.clone(url, dir, revset, optdict.has_key('-b'))
+	Project.clone(url=url, project_dir=project_dir, source=optdict.get('-o'), revset=optdict.get('-b'), bare=optdict.has_key('--bare'), output_buffer=output_buffer)
 
-def checkout(proj, optdict={}, rev=None):
-	return proj.checkout(rev)
+def checkout(proj, optdict, rev=None, src=None):
+	if '-b' in optdict:
+		proj.revset_create(rev, src)
+	proj.checkout(rev)
 
-def fetch(proj, optdict={}, repos=None):
-	return proj.fetch(repos)
+def fetch(proj, optdict, repos=None):
+	proj.fetch(repos=repos)
 
-def update(proj, optdict={}, repos=None):
-	return proj.update(repos)
+def update(proj, optdict):
+	proj.update(recursive=optdict.has_key('-r'))
 
-def status(proj, optdict={}):
-	return proj.status()
+def status(proj, optdict):
+	return proj.status(porcelain=optdict.has_key('-p'))
 
-def revset(proj, optdict={}, dst=None, src=None):
+def revset(proj, optdict, dst=None, src=None):
 	if dst is None:
-		return proj.revset()
+		return proj.revset().get_short_name()
 	else:
-		if src is None:
-			return proj.revset_create(dst)
-		else:
-			return proj.revset_create(dst, src)
+		proj.revset_create(dst, src)
 
-def add(proj, optdict={}, dir=None, name=None, remote=None, rev=None, vcs=None):
-	if not dir:
+def add(proj, optdict, project_dir=None, name=None, remote=None, rev=None):
+	if not project_dir:
 		raise RugError('unspecified directory')
+
+	vcs = optdict.get('-v')
+	use_sha = optdict.has_key('-s')
 
 	#Command-line interprets relative to cwd,
 	#but python interface is relative to project root
-	abs_path = os.path.abspath(dir)
+	abs_path = os.path.abspath(project_dir)
 	path = os.path.relpath(abs_path, proj.dir)
-	return proj.add(path, name, remote, rev, vcs)
+	proj.add(path=path, name=name, remote=remote, rev=rev, vcs=vcs, use_sha=use_sha)
 
-def commit(proj, optdict={}, message=None):
-	if not message:
-		raise NotImplementedError('commit message editor not yet implemented') #TODO
+def commit(proj, optdict):
+	proj.commit(message=optdict.get('-m'), all=optdict.has_key('-a'), recursive=optdict.has_key('-r'))
 
-	return proj.commit(message)
+def publish(proj, optdict, source=None):
+	proj.publish(source)
 
-def publish(proj, optdict={}, remote=None):
-	return proj.publish(remote)
+def remote_list(proj, optdict):
+	return '\n'.join(proj.remote_list())
 
-def remote_list(proj, optdict={}):
-	return proj.remote_list()
+def remote_add(proj, optdict, remote=None, fetch=None):
+	proj.remote_add(remote, fetch)
 
-def remote_add(proj, optdict={}, remote=None, fetch=None):
-	return proj.remote_add(remote, fetch)
+def source_list(proj, optdict):
+	return '\n'.join(proj.source_list())
 
-#(function, pass project flag, options)
+def source_add(proj, optdict, source=None, url=None):
+	proj.source_add(source, url)
+
+#(function, pass project flag, options, long_options, return_stdout)
 rug_commands = {
-	'init': (init, False, 'b'),
-	'clone': (clone, False, 'b'),
-	'checkout': (checkout, True, ''),
-	'fetch': (fetch, True, ''),
-	'update': (update, True, ''),
-	'status': (status, True, ''),
-	'revset': (revset, True, ''),
-	'add': (add, True, ''),
-	'commit': (commit, True, ''),
-	'publish': (publish, True, ''),
-	'remote_list': (remote_list, True, ''),
-	'remote_add': (remote_add, True, ''),
+	'init': (init, False, '', ['--bare'], False),
+	'clone': (clone, False, 'b:o:', ['--bare'], False),
+	'checkout': (checkout, True, 'b', [], False),
+	'fetch': (fetch, True, '', [], False),
+	'update': (update, True, 'r', [], False),
+	'status': (status, True, 'p', [], True),
+	'revset': (revset, True, '', [], True),
+	'add': (add, True, 'sv:', [], False),
+	'commit': (commit, True, 'm:ar', [], False),
+	'publish': (publish, True, '', [], False),
+	'remote_list': (remote_list, True, '', [], True),
+	'remote_add': (remote_add, True, '', [], False),
+	'source_list': (source_list, True, '', [], True),
+	'source_add': (source_add, True, '', [], False),
 	#'reset': (Project.reset, True, ['soft', 'mixed', 'hard']),
 	}
 
@@ -80,15 +88,20 @@ def main():
 		#TODO: write usage
 		print 'rug usage'
 	else:
-		cmd = rug_commands[sys.argv[1]]
-		[optlist, args] = getopt.gnu_getopt(sys.argv[2:], cmd[2])
+		(func, pass_project, optspec, long_options, return_stdout) = rug_commands[sys.argv[1]]
+		[optlist, args] = getopt.gnu_getopt(sys.argv[2:], optspec, long_options)
 		optdict = dict(optlist)
-		if cmd[1]:
-			ret = cmd[0](Project.find_project(), optdict, *args)
+		if return_stdout:
+			file = sys.stderr
 		else:
-			ret = cmd[0](optdict, *args)
+			file = sys.stdout
+		output_buffer = output.WriterOutputBuffer(output.FileWriter(file))
+		if pass_project:
+			ret = func(Project.find_project(output_buffer=output_buffer), optdict, *args)
+		else:
+			ret = func(output_buffer, optdict, *args)
 
-		if ret:
+		if return_stdout:
 			print ret
 
 if __name__ == '__main__':

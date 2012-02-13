@@ -2,6 +2,7 @@ class Writer(object):
 	def write():
 		raise NotImplementedError('Writer.write is an abstract function')
 
+
 class StringWriter(Writer):
 	def __init__(self):
 		super(Writer, self).__init__()
@@ -12,6 +13,7 @@ class StringWriter(Writer):
 			if str[-1] != '\n':
 				str += '\n'
 			self.string += str
+
 
 class FileWriter(Writer):
 	def __init__(self, file):
@@ -24,21 +26,24 @@ class FileWriter(Writer):
 				str += '\n'
 			self.file.write(str)
 
+
 class OutputBuffer(object):
 	def __init__(self, arg=None, prefix=''):
 		if isinstance(arg, OutputBuffer):
 			self._prefix = arg.get_prefix() + prefix
 		else:
 			self._prefix = prefix
-		
+
 	def get_prefix(self):
 		return self._prefix
 
 	def append(self, str):
-		raise NotImplementedError('OutputBuffer.append is an abstract function')
+		raise NotImplementedError(
+			'OutputBuffer.append is an abstract function')
 
 	def spawn(self, prefix=''):
 		return type(self)(self, prefix)
+
 
 class WriterOutputBuffer(OutputBuffer):
 	def __init__(self, arg, prefix=''):
@@ -54,6 +59,7 @@ class WriterOutputBuffer(OutputBuffer):
 	def append(self, str):
 		if str:
 			self._writer.write(self._prefix + str)
+
 
 class NullOutputBuffer(OutputBuffer):
 	def append(self, str):

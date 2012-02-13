@@ -1,6 +1,7 @@
 import os
 import sys
 
+
 #info: (path (if any), parent, subdirectories, subdirectory info lists)
 def dfs(info):
 	ret = []
@@ -11,9 +12,11 @@ def dfs(info):
 			ret.extend(dfs(c))
 	return ret
 
+
 def hierarchy(paths):
 	#TODO: properly handle ..
-	path_split = map(lambda x:[s for s in x.split(os.path.sep) if s not in ['','.']], paths)
+	path_split = map(lambda x: [s for s in x.split(os.path.sep)
+		if s not in ['', '.']], paths)
 
 	root = [None, None, [], []]
 	path_leaves = []
@@ -29,7 +32,9 @@ def hierarchy(paths):
 				cursor[3].append(new_cursor)
 				cursor = new_cursor
 		if cursor[0] is not None:
-			raise ValueError('Duplicate paths: "%s" and "%s"' % (cursor[0], paths[idx]))
+			raise ValueError('Duplicate paths: "%s" and "%s"' % (
+				cursor[0],
+				paths[idx]))
 		else:
 			cursor[0] = paths[idx]
 			path_leaves.append(cursor)

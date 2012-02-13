@@ -3,17 +3,21 @@ import subprocess
 import string
 import output
 
-GIT='git'
-GIT_DIR='.git'
+GIT = 'git'
+GIT_DIR = '.git'
+
 
 class GitError(StandardError):
 	pass
 
+
 class InvalidRepoError(GitError):
 	pass
 
+
 class UnknownRevisionError(GitError):
 	pass
+
 
 def shell_cmd(cmd, args, cwd=None, raise_errors=True):
 	'''shell_cmd(cmd, args, cwd=None, raise_errors=True) -> runs a shell command
@@ -21,9 +25,14 @@ def shell_cmd(cmd, args, cwd=None, raise_errors=True):
 	raise_errors=False: returns (returncode, stdout, stderr)'''
 
 	if cwd:
-		proc = subprocess.Popen([cmd]+args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		proc = subprocess.Popen([cmd] + args,
+			cwd=cwd,
+			stdout=subprocess.PIPE,
+			stderr=subprocess.PIPE)
 	else:
-		proc = subprocess.Popen([cmd]+args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		proc = subprocess.Popen([cmd] + args,
+			stdout=subprocess.PIPE,
+			stderr=subprocess.PIPE)
 
 	(out, err) = proc.communicate()
 	ret = proc.returncode
@@ -34,6 +43,7 @@ def shell_cmd(cmd, args, cwd=None, raise_errors=True):
 			return out.rstrip()
 	else:
 		return (ret, out, err)
+
 
 class Rev(object):
 	def __init__(self, repo_finder, name, unchecked=False):
@@ -93,16 +103,20 @@ class Rev(object):
 
 	def is_descendant(self, rev):
 		rev = self.cast(self.repo_finder, rev)
-		return rev.get_sha() in self.repo.git_func(['rev-list', self.get_short_name()]).split()
+		return rev.get_sha() in self.repo.git_func(
+			['rev-list', self.get_short_name()]).split()
 
 	def merge_base(self, rev):
 		cls = type(self)
 		rev = self.cast(self.repo_finder, rev)
-		return cls.cast(self.repo_finder, \
-			self.repo.git_func(['merge-base', self.get_short_name(), rev.get_short_name()]))
+		return cls.cast(self.repo_finder,
+			self.repo.git_func(['merge-base',
+				self.get_short_name(),
+				rev.get_short_name()]))
 
 	def can_fastforward(self, rev):
 		return self.get_sha() == self.merge_base(rev).get_sha()
+
 
 class Repo(object):
 	rev_class = Rev
@@ -124,7 +138,10 @@ class Repo(object):
 	@classmethod
 	def valid_repo(cls, repo_dir):
 		return os.path.exists(os.path.join(repo_dir, GIT_DIR)) or \
-			(os.path.exists(repo_dir) and (shell_cmd(GIT, ['config', 'core.bare'], cwd=repo_dir, raise_errors=False)[1].lower() == 'true\n'))
+			(os.path.exists(repo_dir) and (shell_cmd(GIT,
+				['config', 'core.bare'],
+				cwd=repo_dir,
+				raise_errors=False)[1].lower() == 'true\n'))
 
 	@classmethod
 	def init(cls, repo_dir=None, bare=None, output_buffer=None):
@@ -132,8 +149,10 @@ class Repo(object):
 			output_buffer = output.NullOutputBuffer()
 
 		args = ['init']
-		if bare: args.append('--bare')
-		if repo_dir: args.append(repo_dir)
+		if bare:
+			args.append('--bare')
+		if repo_dir:
+			args.append(repo_dir)
 
 		shell_cmd(GIT, args)
 		if repo_dir is None:
@@ -142,22 +161,27 @@ class Repo(object):
 			return cls(repo_dir, output_buffer=output_buffer)
 
 	@classmethod
-	def clone(cls, url, repo_dir=None, remote=None, rev=None, local_branch=None, output_buffer=None):
+	def clone(cls, url, repo_dir=None, remote=None, rev=None,
+			local_branch=None, output_buffer=None):
 		if output_buffer is None:
 			output_buffer = output.NullOutputBuffer()
 
 		if remote is None:
 			remote = 'origin'
 
-		#A manual clone is necessary to avoid git's check for an empty directory.
-		#Really need to find another method - manual clone is a maintenance PITA
+		"""
+		A manual clone is necessary to avoid git's check for an empty
+		directory.
+		Really need to find another method - manual clone is a maintenance
+		PITA
+		"""
 		#method = 'standard'
 		method = 'manual'
 		if method == 'standard':
 			args = ['clone', url]
 			if repo_dir:
 				args.append(repo_dir)
-		
+
 			shell_cmd(GIT, args)
 			return cls(repo_dir, output_buffer=output_buffer)
 		elif method == 'manual':
@@ -170,11 +194,16 @@ class Repo(object):
 			repo = cls.init(repo_dir, output_buffer=output_buffer)
 			repo.remote_add(remote, url)
 			repo.fetch(remote)
-			#TODO: weirdness: Git can't actually tell what the HEAD of the remote is directly,
-			#just what it's SHA is.  Which means that if multiple remote branches are at the HEAD sha,
-			#git can't tell which is the actual HEAD.  'git remote set-head -a' errors in this case.
-			#Amazingly, 'git clone' just guesses, and may guess wrong.  This behavior is seriously broken.
-			#see guess_remote_host in git/remote.c
+			"""
+			TODO: weirdness: Git can't actually tell what the HEAD of the
+			remote is directly, just what it's SHA is.  Which means that if
+			multiple remote branches are at the HEAD sha, git can't tell which
+			is the actual HEAD.  'git remote set-head -a' errors in this case.
+
+			Amazingly, 'git clone' just guesses, and may guess wrong.  This
+			behavior is seriously broken.
+			see guess_remote_host in git/remote.c
+			"""
 			repo.remote_set_head(remote)
 
 			if rev and repo.valid_sha(rev):
@@ -190,25 +219,35 @@ class Repo(object):
 					if not local_branch:
 						#remove refs/remotes/<origin>/ for the local version
 						local_branch = '/'.join(remote_branch.get_long_name().split('/')[3:])
-				#Strange things can happen here if local_branch is 'master', since git considers
-				#the repo to be on branch master, although it doesn't technically exist yet.
-				#'checkout -b' doesn't quite to know what to make of this situation, so we branch
-				#explicitly.  Also, checkout will try to merge local changes into the checkout
-				#(which will delete everything), so we force a clean checkout
+				"""
+				Strange things can happen here if local_branch is 'master',
+				since git considers the repo to be on branch master, although
+				it doesn't technically exist yet.
+				'checkout -b' doesn't quite to know what to make of this
+				situation, so we branch explicitly.  Also, checkout will try
+				to merge local changes into the checkout (which will delete
+				everything), so we force a clean checkout
+				"""
 				local_branch = Rev.create(repo, local_branch, remote_branch)
 				repo.checkout(local_branch, force=True)
 
 			return repo
 
 	def git_cmd(self, args, raise_errors=True, return_output=False):
-		'''git_cmd(args, raise_errors=True, return_output=False) -> runs a shell command
-		return_output=False: returns None, appends stdout to output buffer
-		return_output=True, raise_errors=True: returns stdout
-		return_output=True, raise_errors=False: returns (returncode, stdout, stderr)'''
+		"""
+		git_cmd(args, raise_errors=True, return_output=False) ->
+			runs a shell command
+		return_output=False:
+			returns None, appends stdout to output buffer
+		return_output=True, raise_errors=True:
+			returns stdout
+		return_output=True, raise_errors=False:
+			returns (returncode, stdout, stderr)
+		"""
 		#if hasattr(self, 'git_dir'):
 		#	return shell_cmd(GIT, args + ['--git-dir=%s' % self.git_dir])
 		#else:
-		ret = shell_cmd(GIT, args, cwd = self.dir, raise_errors=raise_errors)
+		ret = shell_cmd(GIT, args, cwd=self.dir, raise_errors=raise_errors)
 
 		if raise_errors:
 			stdout = ret
@@ -221,7 +260,10 @@ class Repo(object):
 			self.output.append(stdout)
 
 	def git_func(self, args, raise_errors=True):
-		'''git_func(args, raise_errors=True) -> shorthand for git_cmd(args, raise_errors, return_output=True)'''
+		"""
+		git_func(args, raise_errors=True)
+			shorthand for git_cmd(args, raise_errors, return_output=True)
+		"""
 		return self.git_cmd(args, raise_errors, return_output=True)
 
 	def head(self):
@@ -239,7 +281,7 @@ class Repo(object):
 		return self.git_func(['remote', 'show']).split()
 
 	def remote_add(self, remote, url):
-		self.git_cmd(['remote','add', remote, url])
+		self.git_cmd(['remote', 'add', remote, url])
 
 	def remote_set_head(self, remote, suppress_output=True):
 		if suppress_output:
@@ -249,11 +291,12 @@ class Repo(object):
 		f(['remote', 'set-head', remote, '-a'])
 
 	def remote_set_url(self, remote, url):
-		self.git_cmd(['remote','set-url', remote, url])
+		self.git_cmd(['remote', 'set-url', remote, url])
 
 	def fetch(self, remote=None):
 		args = ['fetch', '-v']
-		if remote: args.append(remote)
+		if remote:
+			args.append(remote)
 
 		self.git_cmd(args)
 
@@ -264,15 +307,18 @@ class Repo(object):
 
 	def commit(self, message, all=False):
 		args = ['commit']
-		if all: args.append('-a')
+		if all:
+			args.append('-a')
 		args.extend(['-m', message])
 
 		self.git_cmd(args)
 
 	def push(self, remote=None, refspec=None, force=False):
 		args = ['push']
-		if force: args.append('-f')
-		if remote: args.append(remote)
+		if force:
+			args.append('-f')
+		if remote:
+			args.append(remote)
 		if refspec:
 			#refspec may be %s:%s rather than just a branch name, so can't cast
 			if isinstance(refspec, Rev):
@@ -284,8 +330,10 @@ class Repo(object):
 
 	def test_push(self, remote=None, refspec=None, force=False):
 		args = ['push', '-n']
-		if force: args.append('-f')
-		if remote: args.append(remote)
+		if force:
+			args.append('-f')
+		if remote:
+			args.append(remote)
 		if refspec:
 			#refspec may be %s:%s rather than just a branch name, so can't cast
 			if isinstance(refspec, Rev):
@@ -339,6 +387,7 @@ class Repo(object):
 	SOFT = 0
 	MIXED = 1
 	HARD = 2
+
 	def reset(self, branch, mode=None):
 		args = ['reset']
 		if mode is not None:
@@ -380,7 +429,12 @@ class Repo(object):
 	#TODO:differentiate between errors and conflicts, act accordingly
 
 	def merge(self, merge_head):
-		return self.git_func(['merge', Rev.cast(self, merge_head).get_short_name()], raise_errors=False)
+		return self.git_func(
+			[
+				'merge',
+				Rev.cast(self, merge_head).get_short_name()
+			],
+			raise_errors=False)
 
 	def rebase(self, base, onto=None):
 		args = ['rebase']
